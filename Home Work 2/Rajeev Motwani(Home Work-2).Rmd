@@ -1,0 +1,955 @@
+---
+title: "Home Work-2"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+install.packages('corrplot')
+```
+
+
+```{r}
+install.packages('leaps')
+```
+
+
+```{r}
+install.packages('gvlma')
+```
+```{r}
+install.packages('MASS')
+```
+
+
+```{r}
+install.packages('effects')
+```
+```{r}
+install.packages('forecast')
+```
+
+
+## Problem 1
+
+```{r echo=FALSE}
+library(ggplot2)
+library(car)
+library(readxl)
+library(corrplot)
+library(forecast)
+library(dplyr)
+library(leaps)
+library(MASS)
+concreteSlump <- read_excel("Concrete Slump Test Data.xlsx")
+```
+
+## Question 1
+```{r}
+scatterplotMatrix(concreteSlump[,-1], main = "Concrete Slump Test Data", col = 'Red')
+```
+
+We have 7 predictor variables i.e. Cement, Slag, Fly Ash, Water, SP, Coarse Aggregate and Fine Aggregate.
+Slump Flow will be our chosen response variable 
+
+```{r}
+scatterplotMatrix(concreteSlump[, -c(1, 9, 11)], main = "New Scatter Plot Matrix", col = 'Red')
+```
+
+## Question 2
+
+We will be using multiple linear regression and polynomial regression
+
+```{r}
+LinearRegression <- lm(`Slump Flow` ~ Cement + Slag + `Fly Ash` + Water + SP + `Coarse Aggregate` + `Fine Aggregate`, data = concreteSlump)
+summary(LinearRegression)
+```
+```{r}
+PolynomialRegression <- lm(`Slump Flow` ~ (Cement + Slag + `Fly Ash` + Water + SP + `Coarse Aggregate` + `Fine Aggregate`)^2, data = concreteSlump)
+summary(PolynomialRegression)
+```
+Multiple Linear Regression will be our preffered model of choice as polynomial regression might result in overfitting
+
+## Question 3
+
+Regression diagnostics with typical approach:
+
+
+
+```{r}
+par(mfrow = c(2, 2))
+plot(LinearRegression)
+```
+
+In the top right graph we can see our normality assumption is satisfied
+ 
+Homoscedasticity
+```{r}
+spreadLevelPlot(LinearRegression)
+```
+
+The abovegraph shows a random band around a horizontal line, so the homoscedasticity assumption is satisfied.
+
+ Regression diagnostics with enhanced approach:
+
+```{r}
+qqPlot(LinearRegression, id.method = "identify", main = "Regression Diagnostics", col.lines = 'blue', col = 'red')
+```
+Points are within a line and are within the confidence bounds indicating satisfaction of normality assumption 
+
+Independence
+```{r}
+durbinWatsonTest(LinearRegression)
+```
+
+The non-significant p-value of 0.808 signifies no autocorrelation.
+
+Linearity
+```{r}
+crPlots(LinearRegression)
+```
+
+all graphs denote that the linearity assumption has been satisfied.
+
+* Homoscedasticity
+```{r}
+ncvTest(LinearRegression)
+
+```
+There is no evidence of heteroscedasticity due to non significant p value
+.
+## Question 4
+
+* Outliers
+```{r}
+outlierTest(LinearRegression)
+
+```
+
+No outlier.
+
+* High leverage points
+```{r}
+hat.plot <- function(LinearRegression) {
+  p <- length(coefficients(LinearRegression))
+  n <- length(fitted(LinearRegression))
+  plot(hatvalues(LinearRegression), main="Index Plot of Hat Values")
+  abline(h = c(2, 3) * p / n, col = "red", lty = 2)
+  identify(1:n, hatvalues(LinearRegression), names(hatvalues(LinearRegression)))
+  }
+hat.plot(LinearRegression)
+```
+
+A few observations are over the line
+
+Influential observations
+```{r}
+cutoff <- 4 / (nrow(concreteSlump) - length(LinearRegression$coefficients) - 2)
+plot(LinearRegression, which = 4, cook.levels = cutoff)
+abline(h = cutoff, lty = 2, col = "blue")
+```
+
+ 69, 8 and 14 are influential observations.
+
+Corrective measures
+  
+Transforming variables
+  
+```{r}
+summary(powerTransform(concreteSlump$`Slump Flow`))
+```
+
+# 5: 
+```{r}
+data<-read_excel('Concrete Slump Test Data.xlsx')
+M <- cor(data)
+corrplot(M, method = "color")
+```
+
+After looking at correlation matrix, we can observe that, Cement and Fly Ash both have same affect on Compressive strength. correlations are very weak for slump w.r.t predictor variables. slump flow and slump are highly correlated. As water increase Slump and Flow increases.    
+
+let's try to fit the predictor for our responses.  
+
+```{r}
+set.seed(0)
+size <- floor(0.66*nrow(data))
+train_ind <- sample(seq_len(nrow(data)), size = size)
+
+train <- data[train_ind, ]
+test <- data[-train_ind, ]
+mean_squared_err <- function(data){
+  return(mean(data^2))
+}
+```
+
+# For Slump  
+
+```{r}
+fit <- lm(Slump ~ Cement + Slag + Water,
+     data = data)
+summary(fit)
+par(mfrow = c(2,2))
+plot(fit)
+```
+
+After the initial Assessment we find all the predictors are very loosely correlated to Slump (all P-values > 0.05). So, the accuracy of the model is going to be very low. since, this model doesn't fit correctly for slump.  
+
+let's try to fit the model anyways.  
+
+```{r}
+# training phase
+y_train_fit <-
+  lm(Slump ~  Cement + Slag + `Fly Ash` + Water + SP + `Coarse Aggregate` + `Fine Aggregate`,
+     data = train)
+summary(y_train_fit)
+
+# testing phase
+y_pred <- predict(y_train_fit, test)
+
+
+actual_preds <-
+  data.frame(cbind(actual = test$Slump, predicted = y_pred))
+cor(actual_preds$actual, actual_preds$predicted)
+
+
+plot(actual_preds$actual, actual_preds$predicted)
+lines(lowess(actual_preds$actual, actual_preds$predicted))
+accuracy(y_pred, test$Slump)
+```
+```{r}
+hist(actual_preds$actual - actual_preds$predicted,main='Error of Residuals')
+```
+  
+The distribution is not normal, which show's that our predictions or fit were poor.  
+
+
+
+Here we see, that the correlation between $\hat y$ and $y$ i.e (y predicted and y actual) after the testing is still very low (r = 0.5252). with $R^2$ value's to be 0.35 and Adjusted $R^2$ to be 0.28. 
+
+# For 28-day Compressive Strength
+```{r}
+fit <-
+  lm(
+    `28-day Compressive Strength` ~ Cement + Slag + `Fly Ash` + Water + SP + `Coarse Aggregate` + `Fine Aggregate`,
+    data = data
+  )
+summary(fit)
+par(mfrow = c(2,2))
+plot(fit)
+```
+
+Our Initial Assessment here tells that, Cement, Water and `Coarse Aggregate` are highly correlated to Compressive Strength. As P-values are lower than 0.05. so on this basis we can model the predictions.  
+
+```{r}
+# training phase
+y_train_fit <-
+  lm(
+    `28-day Compressive Strength` ~ Cement + Slag + `Fly Ash` + Water  + `Coarse Aggregate` + `Fine Aggregate`,
+    data = train
+  )
+summary(y_train_fit)
+
+# testing phase
+y_pred <- predict(y_train_fit, test)
+
+
+actual_preds <-
+  data.frame(cbind(
+    actual = test$`28-day Compressive Strength`,
+    predicted = y_pred
+  ))
+cor(actual_preds$actual, actual_preds$predicted)
+
+plot(actual_preds$actual, actual_preds$predicted)
+lines(lowess(actual_preds$actual, actual_preds$predicted))
+hist(actual_preds$actual - actual_preds$predicted,main='Error of Residuals')
+accuracy(y_pred,test$`28-day Compressive Strength`)
+```
+
+Here we see, that the correlation between $\hat y$ and $y$ i.e (y predicted and y actual) after the testing is still high (r = 0.89). with $R^2$ value's to be 0.91 and Adjusted $R^2$ to be 0.90.  
+
+The model fit's well for Compressive strength.  
+
+# For Slump Flow
+```{r}
+fit <-
+  lm(
+    `Slump Flow` ~ Cement + Slag + `Fly Ash` + Water + SP + `Coarse Aggregate` + `Fine Aggregate`,
+    data = data
+  )
+summary(fit)
+par(mfrow = c(2,2))
+plot(fit)
+```
+
+For Slump Flow, The initial Assessment tells only water is correlated to the output rest are not correlated.  
+let's train our model on this variables.  
+
+```{r}
+# training phase
+y_train_fit <-
+  lm(
+    `Slump Flow` ~ Slag  + Water,
+    data = train
+  )
+summary(y_train_fit)
+
+# testing phase
+y_pred <- predict(y_train_fit, test)
+
+
+actual_preds <-
+  data.frame(cbind(
+    actual = test$`Slump Flow`,
+    predicted = y_pred
+  ))
+cor(actual_preds$actual, actual_preds$predicted)
+
+plot(actual_preds$actual, actual_preds$predicted)
+lines(lowess(actual_preds$actual, actual_preds$predicted))
+hist(actual_preds$actual - actual_preds$predicted,main='Error of Residuals')
+```
+
+After training we find that the correlation between the test output and predicted outupts is 71%. Our model worked just fair enough.  
+
+# 6  
+# Selection of predictors  
+  
+based on the model fitting, we can reduce the dimensions and take only the variables which gives maximum accuracy and with minimum dimensions.   
+For Slump,   
+```{r}
+# training phase
+y_train_fit <-
+  lm(
+    `Slump` ~ Slag +  Water + SP,
+    data = train
+  )
+summary(y_train_fit)
+
+# testing phase
+y_pred <- predict(y_train_fit, test)
+
+
+actual_preds <-
+  data.frame(cbind(
+    actual = test$Slump,
+    predicted = y_pred
+  ))
+cor(actual_preds$actual, actual_preds$predicted)
+accuracy(y_pred, test$Slump)
+plot(actual_preds$actual, actual_preds$predicted)
+lines(lowess(actual_preds$actual, actual_preds$predicted))
+hist(actual_preds$actual - actual_preds$predicted,main='Error of Residuals')
+```
+
+
+For Compressive Strength, 
+```{r}
+# training phase
+y_train_fit <-
+  lm(`28-day Compressive Strength` ~ Cement  + `Fly Ash` + Water  + `Coarse Aggregate` + `Fine Aggregate`,
+     data = train)
+summary(y_train_fit)
+
+# testing phase
+y_pred <- predict(y_train_fit, test)
+
+
+actual_preds <-
+  data.frame(cbind(
+    actual = test$`28-day Compressive Strength`,
+    predicted = y_pred
+  ))
+cor(actual_preds$actual, actual_preds$predicted)
+accuracy(y_pred, test$`28-day Compressive Strength`)
+plot(actual_preds$actual, actual_preds$predicted)
+lines(lowess(actual_preds$actual, actual_preds$predicted))
+hist(actual_preds$actual - actual_preds$predicted,main='Error of Residuals')
+```
+
+
+For Slump Flow, 
+Only Water and Slag is the predictor Significantly correlated to Slump Flow.
+
+We can model and reduce the noise in the model  
+```{r}
+# training phase
+y_train_fit <-
+  lm(`Slump Flow` ~ Slag + Water,
+     data = train)
+summary(y_train_fit)
+
+# testing phase
+y_pred <- predict(y_train_fit, test)
+
+
+actual_preds <-
+  data.frame(cbind(actual = test$`Slump Flow`,
+                   predicted = y_pred))
+cor(actual_preds$actual, actual_preds$predicted)
+
+plot(actual_preds$actual, actual_preds$predicted)
+lines(lowess(actual_preds$actual, actual_preds$predicted))
+hist(actual_preds$actual - actual_preds$predicted, main='Error of Residuals')
+accuracy(y_pred,test$`Slump Flow`)
+```
+
+The best model is:
+
+SlumpFlow = -59.63 + 0.5936 x Water + -0.0908 x Slag 
+CompressiveStrength = 98.67 + 0.08 x Cement + 0.064 x `Fly Ash` -0.210 x Water  - 0.036 x `Coarse Aggregate` -0.023541 x `Fine Aggregate`
+Slump = -20.87 + -0.038 x Slag +  0.22 x Water - 0.21 x SP
+
+
+
+Problem-2
+
+```{r}
+##### Loading the data
+
+forest_fires<-read_xlsx('Forest Fires Data.xlsx')
+
+### Let us convert the character to numerical values
+
+forest_fires$Month <- as.numeric(as.factor(forest_fires$Month))
+forest_fires$Day <- as.numeric(as.factor(forest_fires$Day))
+
+head(forest_fires)
+```
+
+```{r}
+glimpse(forest_fires)
+```
+
+1. Create a scatterplot matrix of “Forest Fire Data” and select an initial set of predictor variables
+
+```{r warning=FALSE}
+##### Creating a scatter plot matrix
+scatter<-forest_fires[,!(colnames(forest_fires)==c('Month','Day'))]
+scatter%>%scatterplotMatrix(pch=19)
+  
+```
+
+Scatter plot matrix helps us to find linear realationship between variables.But it is very diffcult to interpret from the plot so let us use correlation function to view
+
+```{r}
+par(mfrow=c(1,1))
+M <- cor(forest_fires)
+corrplot(M, method="color", outline = TRUE,type="lower",order = "hclust",
+         tl.col="black", tl.srt=45, diag=FALSE,tl.cex = 1,mar=c(0,0,3,0),
+         title="Correlation Matrix")
+
+```
+
+The plot indicates postive correlation betweeen ISI,temp,dc and dcm. The correlation of variables will give proper interpretation.
+
+```{r}
+cor(scatter[,])
+```
+
+According to the description document there are 12 predictor variables and one response variables. 00.68 of DMC indicates it is having linear correlation with DC, so removing it might help in reducing multi-colinearity.
+
+
+
+
+
+```{r}
+summary(forest_fires)  
+```
+
+
+2. Build a few potential regression models using “Forest Fire Data”
+
+Building some potential regression models, Let us first try without  transformation
+
+```{r}
+fit<-lm(`Area`~.,data=forest_fires)
+summary(fit)
+
+```
+ The R-square of 0.02472 indicates that the model does not perform well and adjusted R squared indicates that the model does not fit well.
+
+```{r}
+par(mfrow=c(1,2))
+hist(fit$residuals, main = "Residuals without transformation", xlab = 'Residuals')
+```
+The Residuals are skewed towards we should transform it.
+
+```{r}
+
+par(mfrow=c(3,3))
+boxplot(forest_fires$FFMC, main='FFMC') #outliers
+boxplot(forest_fires$DMC, main ='DMC') # outliers
+boxplot(forest_fires$DC, main='DC') # some outliers
+boxplot(forest_fires$ISI,main='ISI') # outliers
+boxplot(forest_fires$Temp, main='temp') 
+boxplot(forest_fires$RH,main="RH") # outliers
+boxplot(forest_fires$Wind, main='wind') #
+boxplot(forest_fires$Rain, main='rain')  # heavy outliers...high variability in data
+boxplot(forest_fires$Area, main='area') # heavy outliers..high variability in data
+
+
+```
+
+
+
+Let us try with transformed data.
+
+
+```{r}
+transform<-function(x){
+  y=(x+1)
+  return (log(y))
+}
+
+```
+
+
+Removing Skeweness in data
+```{r}
+forest_fires$Area<-transform(forest_fires$Area)
+forest_fires$ISI<-transform(forest_fires$ISI)
+head(forest_fires)
+```
+
+Fitting with transformed data
+
+```{r}
+transform_fit<-lm(`Area`~Month + Day + FFMC + DMC + DC + ISI + Temp + RH + Wind,data=forest_fires)
+summary(transform_fit)
+```
+The transformed data has  accuracy by 0.0226, this model is better than the previous model. F statistics of 1.309 and p values indicates that the predictor variables are not significant for predicting the response variable.
+
+```{r}
+par(mfrow=c(1,2))
+hist(transform_fit$residuals, main = "Residuals with transformation", xlab = 'Residuals')
+```
+
+This indicates transformation has helped in much better distribution of residuals.
+
+
+
+Let us try fitting the model with polynomial regression.
+```{r}
+poly_fit<-lm(Area~ X+Y+Month + Day + FFMC + DMC^2 + DC^2 + ISI^3 + Temp + RH + Wind,data=forest_fires)
+summary(poly_fit)
+
+```
+
+
+
+```{r}
+forestdata<-forest_fires
+# Create interactive terms for Fire index
+forestdata$FFMC.DMC <- forestdata$FFMC*forestdata$DMC
+forestdata$FFMC.DC <-forestdata$FFMC*forestdata$DC
+forestdata$FFMC.ISI <-forestdata$FFMC*forestdata$ISI
+forestdata$DMC.DC<-forestdata$DMC*forestdata$DC
+forestdata$DMC.ISI<-forestdata$DMC*forestdata$ISI
+forestdata$DC.ISI<-forestdata$DC*forestdata$ISI
+
+# Create interactive terms for Weather
+forestdata$Wind.Temp<-(forestdata$Wind)*(forestdata$Temp)
+forestdata$Temp.RH<-(forestdata$Temp)*(forestdata$RH)
+forestdata$Wind.RH<-(forestdata$Wind)*(forestdata$RH)
+
+
+interact_fit<-lm(`Area`~ .,data=forestdata)
+
+summary(interact_fit)
+```
+The polynomial regression  accuracy of 0.04448 and the F-statistics and P-value indicates that the overall fit is not significant. 
+
+
+
+
+Let us try with interaction fit
+
+
+```{r}
+
+interaction_fit<-lm(`Area`~ Month + Day + (FFMC + DMC + DC + ISI + Temp + RH + Wind)^2 ,data=forest_fires)
+
+summary(interaction_fit)
+
+```
+The interaction fit has accuracy of 0.05208 percent. Eventhough the F-statistics and p values suggest that the interaction are not significant.
+
+
+```{r}
+forest_fires$FFMC.DMC <- forest_fires$FFMC*forest_fires$DMC
+forest_fires$FFMC.DC <-forest_fires$FFMC*forest_fires$DC
+forest_fires$FFMC.ISI <-forest_fires$FFMC*forest_fires$ISI
+forest_fires$DC.ISI<-forest_fires$DC*forest_fires$ISI
+forest_fires$RH_sq<-(forest_fires$RH)^2
+
+mod <- lm(formula = Area ~ X + Y + Month + DMC + DC + FFMC.DMC + 
+     FFMC.DC + FFMC.ISI + DC.ISI + RH + RH_sq, data = forest_fires)
+
+summary(mod)
+
+```
+
+
+
+3. Perform regression diagnostics using both typical approach and enhanced approach
+
+a) Typical approach
+
+```{r}
+par(mfrow=c(2,2))
+plot(transform_fit)
+
+```
+
+
+
+The QQ plot indicates that the dependent variables are not normally distributed for given predictor variables with some outliers and it skewed in middle because of large amount of zeros in our data.
+
+The Residuals vs fitted plot indicates that there is no systematic relationship, the staright horizontal line proves that, so there is linear relationship between Response and Predictor Variable.
+
+The scale-Location plot gives that there is homoscedasticity(constant variance).
+
+The residual vs Leverage plot indicates some outliers and observation has some high leverage values indicating unusual combination of predictor values.
+
+
+
+b) Enhanced Approach
+
+1.Normality
+
+```{r}
+qqPlot(transform_fit, labels = row.names(forest_fires), id.method = "identify", simulate = TRUE, main = "Q-Q Plot")
+
+```
+
+The QQ plot indicates that the fit does not satisfy the condition of normality.Due to the large sample size, even small deviations from normality will be picked up as significant so normality will be assessed with plots. There also seems to be a heavy skew to the residuals which are not normally distributed.This appears to be due to the large number of 0’s in the dataset. When these 0’s are removed, we can see the residuals become more normally distributed.Although this means we lose a large chunk of the data cases, this is needed in order to correctly use the lm model.
+
+```{r}
+
+residual<-function(fit,nbreaks=10){
+  z<-rstudent(fit)
+  hist(z,breaks=nbreaks,freq=FALSE,
+  xlab='Studentized Residual',
+  main='Distribution of errors')
+  rug(jitter(z),col='brown')
+  curve(dnorm(x,mean=mean(z),sd=sd(z)),add=T,col='blue',lwd=2)
+  
+}
+
+residual(transform_fit)
+
+```
+
+This residual plot indicates that the distribution of residuals are not normaly distributed which confirms with qq plot
+
+2.Independence of errors
+
+```{r}
+durbinWatsonTest(transform_fit)
+```
+
+The Durbin Watson Test indicates that there is some correlation in errors and indicates some correlation in predictor variables.
+
+
+3. Linearity
+
+```{r}
+crPlots(transform_fit)
+
+```
+
+The plot indicates that there is no systematic relationship, Hence there is linearity between the predictor variables and response variable and this indicates that the property of linearity is satisfied.
+
+4. Homoscedasticity
+
+```{r}
+ncvTest(transform_fit)
+
+```
+
+
+```{r}
+spreadLevelPlot(transform_fit)
+
+```
+
+The ncv Test indicates that there is constant variance and the horizontal line proves the same.So Homoscedascity is satisfied.
+
+
+
+Checking for multicolinearity
+
+```{r}
+
+sqrt(vif(transform_fit))>2
+
+```
+This indicates that there is no multicolinearity in independent variables.
+
+
+d) Identify unusual observations and take corrective measures
+
+
+1) Outliers
+
+```{r}
+outlierTest(transform_fit)
+
+```
+
+Removing outliers(according outlier test the 239 row is an outlier)
+
+```{r}
+new_forest_fires<-forest_fires[-c(239),]
+head(new_forest_fires)
+
+```
+
+
+```{r}
+removing_outlier<-lm(Area~.,data=new_forest_fires)
+summary(removing_outlier)
+```
+After removing the outlier the accuracy score increased.
+
+Let us try removing high influential observations(212,416,514)
+
+2) High Leverage points
+
+```{r}
+
+hat.plot<-function(transform_fit){
+  
+  p<-length(coefficients(transform_fit))
+  n<-length(fitted(transform_fit))
+  plot(hatvalues(transform_fit),main='Index plot of hat values')
+  abline(h=c(2,3)*p/n,col='red',lty=2)
+  identify(1:n, hatvalues(transform_fit),names(hatvalues(transform_fit)))
+}
+
+hat.plot(transform_fit)
+
+```
+There are some outliers according to hat values.
+
+3) Influential Observations
+
+
+```{r}
+
+cutoff<-4/(nrow(forest_fires)-length(transform_fit$coefficients)-2)
+plot(transform_fit,which=4,cook.levels=cutoff)
+abline(h=cutoff,lty=2,col="red")
+
+```
+
+The graph identifies that 380,416 and 514 as influential observations.
+
+
+Corrective measures.
+
+
+
+```{r}
+influential_observation<-as.data.frame(new_forest_fires[-c(380,416,514),])
+head(new_forest_fires)
+
+```
+
+```{r}
+influential_fit<-lm(Area~.,data=influential_observation)
+summary(influential_fit)
+```
+This has improved our accuracy  by removing influential observations and outliers.
+
+
+5. Select the best regression model
+
+Anova Approach
+```{r}
+anova(fit,transform_fit,poly_fit,interact_fit,interaction_fit,mod)
+```
+
+AIC approach for selecting the best model:
+
+```{r}
+AIC(fit,transform_fit,poly_fit,interaction_fit,mod)
+```
+
+The p-value(0.2515,0.6192,0.8753.0.6346) indicates that the model does not add to linear prediction and we can remove it, with AIC score of 1823.119 we can choose transform fit as our best model.
+
+After the selection of best model let's use it for linear regression
+
+
+
+```{r}
+linear<-read_excel('Forest Fires Data.xlsx')
+linear$Month <- as.numeric(as.factor(linear$Month))
+linear$Day <- as.numeric(as.factor(linear$Day))
+linear<-linear[-c(239,380,416,514),]
+linear$Area<-transform(linear$Area)
+linear$ISI<-transform(linear$ISI)
+head(linear)
+```
+
+Partitioning the data into 60 and 40
+
+
+```{r}
+
+train<-round(nrow(linear)*0.60)
+test<-round(nrow(linear)*0.40)
+train
+test
+
+```
+
+
+```{r}
+set.seed(1)
+train.index<-sample(c(1:513),308)
+train.df<-linear[train.index,]
+test.df<-linear[-train.index,]
+test.df<-test.df[which(test.df$Area>0),]
+summary(train)
+summary(test)
+```
+
+fitting linear regression to training set
+
+```{r}
+
+train.lm_1<-lm(Area~ Month + Day + FFMC + DMC + DC + ISI + Temp + RH + Wind,data=train.df)
+train.lm<-lm(Area~Month + Day + FFMC + DMC + DC + ISI + Temp + RH + Wind,data=train.df[which(train.df$Area>0),])
+```
+
+
+```{r}
+par(mfrow=c(1,2))
+hist(train.lm_1$residuals, main = "Data with 0 area burned", xlab = 'Residuals')
+abline(v=mean(train.lm_1$residuals), col='red', lwd=2)
+hist(train.lm$residuals,main = "Data without 0 area burned", xlab = 'Residuals')
+abline(v=mean(train.lm$residuals), col='red', lwd=2)
+```
+
+By Removing the Skewed data at 0, the normality condition is almost satisfied.This removes lot of values but it is needed for better prediction. Let us plot the QQ Plot and observe whether removing 0 helps in normality or not.
+
+```{r}
+qqPlot(train.lm, main="Plot of Residuals after Zero's are removed",xlab='',ylab='')
+
+```
+
+
+```{r}
+summary(train.lm)
+```
+
+
+This model gives an accuracy of 0.08103 after removing outliers, influential observations data and removing skewed data of zeros.
+
+fitting the data to testing set
+
+
+
+```{r}
+pred<-predict(train.lm,test.df)
+summary(pred)
+
+```
+
+Comparing the errors between actual and predicted values
+
+```{r}
+comparing_residuals<-test.df$Area[1:20]-pred[1:20]
+comparing<-data.frame('predicted'=pred[1:20],'Actual'=test.df$Area[1:20],'Residuals'=comparing_residuals)
+comparing
+```
+
+Let us check the accuracy
+
+```{r}
+accuracy(pred,test.df$Area)
+```
+
+```{r}
+rsq <- function (x, y) {
+  return (cor(x, y) ^ 2)
+}
+```
+
+
+```{r}
+rsq(pred,test.df$Area)
+```
+
+The R-squared value indicates that the model performs really bad in the validation data.
+
+
+```{r}
+comparing_residual<-test.df$Area-pred
+hist(comparing_residual,main='Distribution of Errors of Residuals')
+```
+
+The distribution of Rediuals error indicates how the predicted value differ from actual values.
+
+
+6. Fine tuning the predictor variables.
+
+
+Exhausttive Search
+
+```{r}
+exhaustive_search <- regsubsets(Area ~ ., data = train.df, nbest = 1, nvmax = dim(train.df)[2],
+method = "exhaustive")
+
+sum<-summary(exhaustive_search)
+sum$which
+```
+
+
+Metrics
+
+```{r}
+sum$rsq
+sum$adjr2
+sum$cp
+```
+
+The Exhaustive search indicates that the model fits the data really badly, by trying different combination of predictor variables and adjusted R square values indicates that the fit is not good for each combination of fits.
+
+
+Relative importance of variables.
+
+Backward Elimination
+
+```{r}
+step <- step(train.lm, direction = "backward")
+summary(step) 
+pred_step <- predict(step,test.df)
+accuracy(pred_step, test.df$Area)
+```
+
+7.Interpret the prediction results
+
+According to Backward elimination the best model has predictor variables as Month,DMC,DC,ISI With R squared error of 0.06914  
+F statistic and p-value indicates that the predictor combination is significant. This model is much better compared to the previous fit.
+
+
+
+Fine tuning and selecting the best predictor variables.
+
+With fine tuning the best Response variable has following intercept and slope for prediction.
+
+Area=2.7208952+ Month(0.0639425)+DMC (0.0051796)+DC (-0.0013231)+ISI(-0.3814717)
+
+
+
