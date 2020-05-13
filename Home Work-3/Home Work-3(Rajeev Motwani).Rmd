@@ -1,0 +1,672 @@
+---
+title: "Home-Work-3(Rajeev Motwani)"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(caret)
+library(FNN)
+library(class)
+library(e1071)
+library(fastDummies)
+library(caTools)
+library(readr)
+library(reshape2)
+```
+
+Problem 7.1 [25 points]
+
+Partition the data into training (60%) and validation (40%) sets.
+
+```{r}
+dataset = read.csv("C:\\Users\\kkbal\\OneDrive\\Desktop\\Neu\\data mining\\Assignment-3\\UniversalBank.csv")
+
+head(dataset)
+
+set.seed(100)
+```
+
+```{r}
+# Transforming the categorical variable "Education" into dummy variables
+
+dataset <- dummy_cols(dataset, select_columns = 'Education', remove_selected_columns = TRUE)
+head(dataset)
+```
+
+```{r}
+# Splitting the data into training(60%) and validation(40%) sets
+
+split = sample.split(dataset$Personal.Loan, SplitRatio = 0.6)
+training_set = subset(dataset, split == TRUE)
+validation_set = subset(dataset, split == FALSE)
+```
+
+Problem 1.
+
+a. Consider the following customer: Age = 40, Experience = 10, Income = 84, Family = 2, CCAvg = 2, Education_1 = 0, Education_2 = 1, Education_3 = 0, Mortgage = 0, Securities
+Account = 0, CD Account = 0, Online = 1, and Credit Card = 1. Perform a k-NN classification with all predictors except ID and ZIP code using k = 1. Remember to transform categorical predictors with more than two categories into dummy variables first. Specify the success class as 1 (loan acceptance), and use the default cutoff value of
+0.5. How would this customer be classified?
+
+```{r}
+# Fitting K-NN to the training_set and predicting the test set result
+
+test_set = data.frame(Age = as.integer(40), Experience = 10, Income = 84, Family = 2, CCAvg = 2,
+                      Education_1 = 0, Education_2 = 1, Education_3 = 0, 
+                      Mortgage = 0, 'Securities Account' = 0, 'CD Account' = 0,
+                      Online = 1, CreditCard = 1)
+y_pred = knn(train = training_set[-c(1, 5, 9)],
+             test = test_set,
+             cl = training_set[,9],
+             k = 1)
+y_pred
+```
+
+This customer did not accept the personal loan offered in the earlier campaign.
+
+Problem 1.
+
+b. What is a choice of k that balances between overfitting and ignoring the predictor information?
+
+```{r}
+acc <- numeric()
+for(i in 1:12) {
+y_pred <- knn(train = training_set[-c(1, 5, 9)],
+             test = validation_set[-c(1, 5, 9)],
+             cl = training_set[,9],
+             k = i)
+acc <- c(acc, mean(y_pred == validation_set$Personal.Loan))
+}
+
+plot(1-acc,type="l",ylab="Error Rate",
+ xlab="K",main="Error Rate for Predictions With Varying K")
+```
+As the error rate is lowest when k =5, it clearly balances between overfitting and
+ignoring the predictor information
+
+Problem 1.
+
+c) Show the confusion matrix for the validation data that results from using the best k.
+
+```{r}
+
+y_pred = knn(train = training_set[-c(1, 5, 9)],
+             test = validation_set[-c(1, 5, 9)],
+             cl = training_set[,9],
+             k = 5)
+cm = table(validation_set[, 10], y_pred)
+confusionMatrix(cm)
+```
+
+Problem 1.
+
+
+d) Consider the following customer: Age = 40, Experience = 10, Income = 84, Family = 2, CCAvg = 2, Education_1 = 0, Education_2 = 1, Education_3 = 0, Mortgage = 0, Securities Account = 0, CD Account = 0, Online = 1 and Credit Card = 1. Classify the customer using the best k.
+
+```{r}
+y_pred = knn(train = training_set[-c(1, 5, 9)],
+             test = test_set,
+             cl = training_set[,9],
+             k = 6)
+y_pred
+```
+This customer did not accept the personal loan offered in the earlier campaign.
+
+
+Problem 1.
+
+e) Repartition the data, this time into training, validation, and test sets (50% : 30% : 20%). Apply the k-NN method with the k chosen above. Compare the confusion matrix of the test set with that of the training and validation sets. Comment on the differences and their reason.
+
+```{r}
+data <- sample(1:3, prob = c(0.5, 0.3, 0.2))
+train_set <- dataset[data == 1, ]
+validation_set <- dataset[data == 2, ]
+test_set <- dataset[data == 3, ]
+
+y_pred_validation = knn(train = training_set[-c(1, 5, 9)],
+             test = validation_set[-c(1, 5, 9)],
+             cl = training_set[,9],
+             k = 6)
+
+y_pred_test = knn(train = training_set[-c(1, 5, 9)],
+             test = test_set[-c(1, 5, 9)],
+             cl = training_set[,9],
+             k = 6)
+
+cm_validation = table(validation_set[, 10], y_pred_validation)
+cm_test = table(test_set[, 10], y_pred_test)
+```
+```{r}
+confusionMatrix(cm_validation)
+```
+```{r}
+confusionMatrix(cm_test)
+```
+
+
+Problem 7.2 [25 points]
+Predicting Housing Median Prices. The file BostonHousing.csv contains information on over 500 census tracts in Boston, where for each tract multiple variables are recorded. The last column (CAT.MEDV) was derived from MEDV, such that it obtains the value 1 if MEDV > 30 and 0 otherwise. Consider the goal of predicting the median value (MEDV) of a tract, given the
+information in the first 12 column
+
+
+```{r}
+housing<-read_csv('C:\\Users\\kkbal\\OneDrive\\Desktop\\Neu\\data mining\\Assignment-3\\BostonHousing.csv')
+housing$`CAT. MEDV`<-as.factor(housing$`CAT. MEDV`)
+head(housing)
+
+```
+
+
+Partitioning into 60 and 40.
+
+```{r}
+set.seed(111)
+
+train<-sample(row.names(housing),0.6*dim(housing)[1])
+validation<-setdiff(row.names(housing),train)
+
+train.df<-housing[train,]
+validation.df<-housing[validation,]
+
+
+```
+
+
+
+a. Perform a k-NN prediction with all 12 predictors (ignore the CAT.MEDV column),trying values of k from 1 to 5. Make sure to normalize the data, and choose functionknn() from package class rather than package FNN. To make sure R is using the classpackage (when both packages are loaded), use class::knn(). What is the best k? What does it mean?
+
+normalization
+
+```{r}
+
+train.norm.df<-train.df
+
+validation.norm.df<-validation.df
+
+new_housing<-housing
+
+values.preprocess<-preProcess(train.df[,1:12],method=c('center','scale'))
+
+
+```
+
+
+
+```{r}
+
+train.norm.df[,1:12]<-predict(values.preprocess,train.df[,1:12])
+
+new_housing<-predict(values.preprocess,housing)
+
+validation.norm.df[,1:12]<-predict(values.preprocess,validation.df[,1:12])
+
+
+
+```
+
+
+
+Using class package to predict the outcome, since class package accounts only for classifications.
+
+```{r}
+
+accuracy<-data.frame(k=seq(1,5,1),'RMSE'=rep(0,5))
+
+for (i in 1:5){
+  
+  knn<-class::knn(train.norm.df[,1:12],validation.norm.df[,1:12] ,cl=train.norm.df$MEDV,k=i)
+  
+  accuracy[i,2]<-sqrt(sum((validation.norm.df$MEDV- as.numeric(levels(knn))[knn])^2)/nrow(validation.norm.df))
+  
+}
+
+accuracy
+
+
+```
+
+K=1 eventhough provides better accuracy rate but it can fit the noise. k=4 has lower Rmse and can help us to find local structures in the dataset.
+
+
+
+We will now perform regression based knn using FNN package and interpret the results
+
+Using different k  values, Since MEDV is a continous variable we use R^2 as an accuracy metrics 
+
+
+
+```{r}
+### function to compute r^2
+
+rsq<-function(x,y){
+  cor(x,y)^2
+}
+
+accuracy<-data.frame(k=seq(1,5,1),'R-Square'=rep(0,5))
+
+for (i in 1:5){
+  
+  knn<-FNN::knn.reg(train.norm.df[,1:12],validation.norm.df[,1:12],y=train.norm.df$MEDV,k=i)$pred
+  
+  accuracy[i,2]<- rsq(validation.norm.df$MEDV,knn)
+}
+
+accuracy
+
+
+
+```
+
+For different values of k, k=4  gives better accuracy on validation set and it well help us to find local structure in our data, so we choose k=4.
+
+
+
+b. Predict the MEDV for a tract with the following information, using the best k
+
+
+```{r}
+
+tract<- data.frame(CRIM = 0.2, ZN = 0, INDUS = 7, CHAS = 0, NOX = 0.538, RM = 6, AGE = 62, DIS = 4.7, RAD = 4, TAX = 307, PTRATIO = 21, LSTAT = 10)
+
+
+tract.norm<-predict(values.preprocess,tract)
+
+tract.pred<-FNN::knn.reg(new_housing[,1:12],tract.norm,y=new_housing$MEDV,k=4)
+
+tract.pred
+
+
+```
+The new predicted value is 19.3
+
+
+c. If we used the above k-NN algorithm to score the training data, what would be the error of the training set?
+
+```{r}
+
+
+knn.train<-FNN::knn.reg(train.norm.df[,1:12],train.norm.df[,1:12],y=train.norm.df$MEDV,k=1)$pred
+
+rsq(train.norm.df$MEDV,knn.train)
+
+```
+
+The Rsquare 1 indicates that the accuracy is 100%, the error rate is 0.
+
+
+
+d. Why is the validation data error overly optimistic compared to the error rate when applying this k-NN predictor to new data?
+
+Solution
+
+The validation data closely matches the data from training set because the model is derived from the original dataset. Also the validation data is a sample from data set so the error is overly optimistic.
+
+
+
+e.If the purpose is to predict MEDV for several thousands of new tracts, what would be the disadvantage of using k-NN prediction? List the operations that the algorithm goes
+  through in order to produce each prediction.
+   
+solution
+
+For the large tracts of data it need a long time to calculate K-NN. The algorithm used in K-NN has to calculate the distance between the cases in the dataset and thus the operation become little timetaking. Also one more problem is when there is large sets of data then there are large number ofpredictors and the time increases for the algorithm to run as it has to find even more number if distances in the calculations it run. 
+
+
+Problem 8.1 [25 points]
+
+```{r}
+bank_dataset <- read_csv("C:\\Users\\kkbal\\OneDrive\\Desktop\\Neu\\data mining\\Assignment-3\\UniversalBank.csv")
+head(bank_dataset)
+```
+
+
+
+```{r}
+bank_dataset$Personal.Loan = as.factor(bank_dataset$`Personal Loan`)
+bank_dataset$Online = as.factor(bank_dataset$Online)
+bank_dataset$CreditCard = as.factor(bank_dataset$CreditCard)
+set.seed(1)
+train.index <-
+  sample(row.names(bank_dataset), 0.6 * dim(bank_dataset)[1])
+test.index <- setdiff(row.names(bank_dataset), train.index)
+train.df <- bank_dataset[train.index,]
+test.df <- bank_dataset[test.index,]
+train <- bank_dataset[train.index,]
+test = bank_dataset[train.index, ]
+```
+
+
+
+a. Create a pivot table for the training data with Online as a column variable, CC as a row variable, and Loan as a secondary row variable. The values inside the table should
+convey the count. In R use functions melt() and cast(), or function table().
+
+```{r}
+melted_bank <-
+  melt(train,
+       id = c("CreditCard", "Personal.Loan","Online"))
+recast_bank <- dcast(melted_bank, CreditCard + Personal.Loan ~ Online)
+colnames(recast_bank) <- c("CreditCard","Personal.Loan","Online.0","Online.1")
+recast_bank[, c("CreditCard", "Personal.Loan", "Online.0","Online.1")]
+```
+
+
+ b) Consider the task of classifying a customer who owns a bank credit card and is actively using online banking services. Looking at the pivot table, what is the probability that this customer will accept the loan offer? [This is the probability of loan acceptance (Loan= 1) conditional on having a bank credit card (CC = 1) and being an active user of online banking services (Online = 1)].
+
+```{r}
+online_if_cc_and_personal_loan <-
+  subset(recast_bank, CreditCard == 1 & Personal.Loan == 1)
+sum(online_if_cc_and_personal_loan$Online.1)/ sum(subset(recast_bank, CreditCard == 1)$Online.1)
+```
+
+
+
+c) Create two separate pivot tables for the training data. One will have Loan (rows) as a function of Online (columns) and the other will have Loan (rows) as a function of CC.
+ 
+```{r}
+melted_bank_dataset1 <-
+  melt(train, id = c("CreditCard"), variable = "Online")
+melted_bank_dataset2 <-
+  melt(train, id = c("Personal.Loan"), variable = "Online")
+recast_bank_dataset1 <-
+  dcast(melted_bank_dataset1, CreditCard ~ Online)
+recast_bank_dataset2 <-
+  dcast(melted_bank_dataset2, Personal.Loan ~ Online)
+table_credit_card <-
+  recast_bank_dataset1[, c("CreditCard", "Online")]
+table_personal_loan <-
+  recast_bank_dataset2[, c("Personal.Loan", "Online")]
+```
+
+
+d) Compute the following quantities [P(A ∣ B) means “the probability of A given B”]:
+
+
+i)
+
+```{r}
+table(train[,c("CreditCard","Personal.Loan")])
+```
+
+```{r}
+82/(82+209)
+```
+
+ii)
+
+```{r}
+table(train[,c("Online","Personal.Loan")])
+```
+```{r}
+180/(180+111)
+```
+
+iii)
+
+```{r}
+table(train[,c("Personal.Loan")])
+```
+```{r}
+(291)/2709
+```
+
+
+iv)
+
+
+```{r}
+(786)/(786+1923)
+```
+
+
+v)
+
+```{r}
+(1612)/(1612+1097)
+```
+
+
+vi)
+
+```{r}
+2709/(291+2709)
+```
+
+
+e) Use the quantities computed above to compute the naive Bayes probability P(Loan = 1 ∣ CC = 1, Online = 1). 
+ 
+```{r}
+(0.1074197 * 0.2817869 * 0.6185567)/((0.1074197 * 0.2817869 * 0.6185567)+(0.290144*0.903*0.5950535))
+```
+
+f) Compare this value with the one obtained from the pivot table in (b). Which is a more accurate estimate?
+
+10.7% are very similar to the 9.9% the difference between the exact method and the naive-baise method is the exact method would need the the exact same independent variable classifications to predict, where the naive bayes method does not.
+
+
+
+g) Which of the entries in this table are needed for computing P(Loan = 1 ∣ CC = 1, Online =1)? In R, run naive Bayes on the data. Examine the model output on training data, and
+find the entry that corresponds to P(Loan = 1 ∣ CC = 1, Online = 1). Compare this to the number you obtained in (e).
+
+```{r}
+naive.train = train[,c("Online","Personal.Loan","CreditCard")]
+naivebayes = naiveBayes(Personal.Loan~.,data=naive.train)
+naivebayes
+```
+
+the naive bayes is the exact same output we recieved in the previous methods. 
+
+
+Question 8.2
+
+
+```{r}
+Accidents <- read.csv("C:\\Users\\kkbal\\OneDrive\\Desktop\\Neu\\data mining\\Assignment-3\\accidentsFull.csv")
+Accidents$INJURY <- ifelse(Accidents$MAX_SEV_IR>0, "yes", "no")
+```
+
+a) Using the information in this dataset, if an accident has just been reported and no further information is available, what should the prediction be? (INJURY = Yes or No?)
+Why?
+ 
+```{r}
+Prob <- table(Accidents$INJURY)
+Final =  scales::percent(Prob["yes"]/(Prob["yes"]+Prob["no"]),0.01)
+Final
+```
+
+Since probability of Injury is higher~51% therefore we should predict injury in case of an accident
+
+
+b) Select the first 12 records in the dataset and look only at the response (INJURY) and the two predictors WEATHER_R and TRAF_CON_R.
+
+
+```{r}
+for (i in c(1:dim(Accidents)[2])){
+  Accidents[,i] <- as.factor(Accidents[,i])
+}
+```
+```{r}
+first12 <- Accidents[1:12, c(16,19,25)]
+first12
+```
+
+
+i)
+
+```{r}
+table(first12$TRAF_CON_R, first12$WEATHER_R, first12$INJURY, dnn = c("TRAF_CON_R","WEATHER_R", "INJURY"))
+```
+
+ii)
+
+
+```{r}
+#P(Injury=yes|WEATHER_R = 1, TRAF_CON_R =0):
+numerator1 <- 2/3 * 3/12
+denominator1 <- 3/12
+prob1 <- numerator1/denominator1
+prob1
+
+#P(Injury=yes|WEATHER_R = 1, TRAF_CON_R =1):
+numerator2 <- 0 * 3/12
+denominator2 <- 1/12
+prob2 <- numerator2/denominator2
+prob2
+
+# P(Injury=yes| WEATHER_R = 1, TRAF_CON_R =2):
+numerator3 <- 0 * 3/12
+denominator3 <- 1/12
+prob3 <- numerator3/denominator3
+prob3
+
+# P(Injury=yes| WEATHER_R = 2, TRAF_CON_R =0):
+numerator4 <- 1/3 * 3/12
+denominator4 <- 6/12
+prob4 <- numerator4/denominator4
+prob4
+
+# P(Injury=yes| WEATHER_R = 2, TRAF_CON_R =1):
+numerator5 <- 0 * 3/12
+denominator5 <- 1/12
+prob5 <- numerator5/denominator5
+prob5
+
+#P(Injury=yes| WEATHER_R = 2, TRAF_CON_R =2):
+numerator6 <- 0 * 3/12
+denominator6 <- 0
+prob6 <- numerator6/denominator6
+prob6
+
+```
+
+iii) When the cutoff is 0.5, from the above calculations we see that only when WEATHER_R is 1 and TRAF_CON_R is 0 we will get an INJURY
+
+
+```{r}
+first12$predicted <- ifelse(first12$TRAF_CON_R == 0 & first12$WEATHER_R == 1, "yes", "no")
+first12
+```
+iv)
+
+```{r}
+Probability <- 2/3 * 0/3 * 3/12
+Probability
+```
+
+
+v)
+
+```{r}
+Naive_1<- naiveBayes(INJURY ~ TRAF_CON_R + WEATHER_R, first12)
+predicted_prob <- predict(Naive_1, newdata = first12, type = "raw")
+##  cutoff = 0.5
+predicted_class <- c("Yes", "No", "No", "No", "Yes", "No", "No", "Yes", "No", "No", "No", "No")
+df <- data.frame(actual = first12$INJURY, predicted = predicted_class, predicted_prob)
+df
+```
+The errors that appear when running the naive Bayes on this sample set are nothing to really worry about, they just mean that these parameter do very poorly when classified. The  classification is equivalent. The ranking (= ordering) of observations are also equivalent.
+
+
+c) Let us now return to the entire dataset. Partition the data into training (60%) and validation (40%).
+
+
+```{r}
+set.seed(571)
+train.index <- sample(c(1:dim(Accidents)[1]), dim(Accidents)[1]*0.6)  
+train <- Accidents[train.index,]
+valid <- Accidents[-train.index,]
+```
+
+i) We can use the predictors that describe the calendar time or road conditions: HOUR_I_R ALIGN_I WRK_ZONE WKDY_I_R INT_HWY LGTCON_I_R PROFIL_I_R SPD_LIM SUR_CON TRAF_CON_R TRAF_WAY WEATHER_R.
+
+
+ii)
+
+```{r}
+head(Accidents)
+vars <- c("INJURY", "ï..HOUR_I_R",  "ALIGN_I" ,"WRK_ZONE",  "WKDY_I_R",
+          "INT_HWY",  "LGTCON_I_R", "PROFIL_I_R", "SPD_LIM", "SUR_COND",
+          "TRAF_CON_R",   "TRAF_WAY",   "WEATHER_R")
+train_nb <- naiveBayes(INJURY ~ ., train[,vars])
+train_nb
+confusionMatrix(train$INJURY, predict(train_nb, train[,vars]), positive = "yes")
+```
+
+```{r}
+error=1-.544
+percentage_error=scales::percent(error,0.01)
+paste("Overall Error: ",percentage_error)
+```
+
+iii)
+
+```{r}
+# validation
+confusionMatrix(valid$INJURY, predict(train_nb, valid[, vars]), positive = "yes")
+```
+```{r}
+val_error=1-.5389
+val_error_perc=scales::percent(val_error,0.01)
+paste("Overall Error: ",val_error_perc)
+```
+
+
+iv)
+
+```{r}
+improvement=val_error-error
+paste("The percent improvement is ",scales::percent(improvement,0.01))
+```
+
+ v)
+ 
+```{r}
+options(digits = 2)
+train_nb
+```
+We do not actually get a probability of zero for no injury in accidents under the speed limit of 5 as there is a single accident out of all the records, it makes sense that the probability is quite close to 0.
+
+   
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
